@@ -27,7 +27,7 @@ export default function session<T extends SessionRecord = SessionRecord>(
     id: string,
     _now: number
   ) {
-    if ("session" in req && res) {
+    if ("headers" in req && res) {
       Object.defineProperties(session, {
         commit: {
           value: async function commit(this: TypedSession) {
@@ -116,7 +116,7 @@ export default function session<T extends SessionRecord = SessionRecord>(
       decorateSession(req, res, session, sessionId, _now);
     }
 
-    if ("session" in req && res) {
+    if ("headers" in req && res) {
       req.session = session;
 
       // prevSessStr is used to compare the session later
