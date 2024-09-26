@@ -27,32 +27,34 @@ export default function session<T extends SessionRecord = SessionRecord>(
     id: string,
     _now: number
   ) {
-    if ("headers" in req && res) {
-      Object.defineProperties(session, {
-        commit: {
-          value: async function commit(this: TypedSession) {
+    Object.defineProperties(session, {
+      commit: {
+        value: async function commit(this: TypedSession) {
+          if ("headers" in req && res) {
             commitHeader(res, name, this, encode);
-            await store.set(this.id, this);
-          },
+          }
+          await store.set(this.id, this);
         },
-        touch: {
-          value: async function commit(this: TypedSession) {
-            this.cookie.expires = new Date(_now + this.cookie.maxAge! * 1000);
-            this[isTouched] = true;
-          },
+      },
+      touch: {
+        value: async function commit(this: TypedSession) {
+          this.cookie.expires = new Date(_now + this.cookie.maxAge! * 1000);
+          this[isTouched] = true;
         },
-        destroy: {
-          value: async function destroy(this: TypedSession) {
-            this[isDestroyed] = true;
-            this.cookie.expires = new Date(1);
-            await store.destroy(this.id);
+      },
+      destroy: {
+        value: async function destroy(this: TypedSession) {
+          this[isDestroyed] = true;
+          this.cookie.expires = new Date(1);
+          await store.destroy(this.id);
+          if ("headers" in req && res) {
             if (!autoCommit) commitHeader(res, name, this, encode);
             delete req.session;
-          },
+          }
         },
-        id: { value: id },
-      });
-    }
+      },
+      id: { value: id },
+    });
   }
 
   return async function sessionHandle(

@@ -1,7 +1,7 @@
 {
   "type": "module",
   "name": "@beyondidentity/next-session",
-  "version": "4.1.2",
+  "version": "4.1.3",
   "description": "Simple promise-based session for Next.js",
   "keywords": [
     "nextjs",
@@ -31,6 +31,7 @@
     "build:typescript": "tsc --outDir lib --emitDeclarationOnly",
     "build": "rm -rf lib && yarn build:typescript && yarn build:commonjs && yarn build:module",
     "lint": "eslint src --ext ts --ignore-path .gitignore",
+    "prepack": "yarn build",
     "test:import": "cd test/import-test && rm -rf node_modules && yarn && node index.js && node index.cjs && cd ../../",
     "test:unit": "jest --coverageReporters=text-lcov > coverage.lcov",
     "test": "yarn test:unit && yarn test:import"
