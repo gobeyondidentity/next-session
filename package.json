@@ -1,7 +1,7 @@
 {
   "type": "module",
-  "name": "next-session",
-  "version": "4.0.4",
+  "name": "@beyondidentity/next-session",
+  "version": "4.1.0",
   "description": "Simple promise-based session for Next.js",
   "keywords": [
     "nextjs",
@@ -37,14 +37,14 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/hoangvvo/next-session.git"
+    "url": "git+https://github.com/gobeyondidentity/next-session.git"
   },
   "author": "Hoang Vo (https://hoangvvo.com)",
   "license": "MIT",
   "bugs": {
-    "url": "https://github.com/hoangvvo/next-session/issues"
+    "url": "https://github.com/gobeyondidentity/next-session/issues"
   },
-  "homepage": "https://github.com/hoangvvo/next-session#readme",
+  "homepage": "https://github.com/gobeyondidentity/next-session#readme",
   "devDependencies": {
     "@babel/cli": "^7.15.7",
     "@babel/core": "^7.15.5",

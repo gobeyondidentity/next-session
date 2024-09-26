@@ -3,10 +3,12 @@ import { IncomingMessage, ServerResponse } from "http";
 import { nanoid } from "nanoid";
 import MemoryStore from "./memory-store";
 import { isDestroyed, isNew, isTouched } from "./symbol";
-import { Options, Session, SessionRecord } from "./types";
+import { CookieStore, Options, Session, SessionRecord } from "./types";
 import { commitHeader, hash } from "./utils";
 
-export default function session<T extends SessionRecord = SessionRecord>(options: Options = {}) {
+export default function session<T extends SessionRecord = SessionRecord>(
+  options: Options = {}
+) {
   type TypedSession = Session<T>;
 
   const name = options.name || "sid";
@@ -19,49 +21,55 @@ export default function session<T extends SessionRecord = SessionRecord>(options
   const cookieOpts = options.cookie || {};
 
   function decorateSession(
-    req: IncomingMessage & { session?: TypedSession },
-    res: ServerResponse,
+    req: (IncomingMessage & { session?: TypedSession }) | CookieStore,
+    res: ServerResponse | undefined,
     session: TypedSession,
     id: string,
     _now: number
   ) {
-    Object.defineProperties(session, {
-      commit: {
-        value: async function commit(this: TypedSession) {
-          commitHeader(res, name, this, encode);
-          await store.set(this.id, this);
+    if ("session" in req && res) {
+      Object.defineProperties(session, {
+        commit: {
+          value: async function commit(this: TypedSession) {
+            commitHeader(res, name, this, encode);
+            await store.set(this.id, this);
+          },
         },
-      },
-      touch: {
-        value: async function commit(this: TypedSession) {
-          this.cookie.expires = new Date(_now + this.cookie.maxAge! * 1000);
-          this[isTouched] = true;
+        touch: {
+          value: async function commit(this: TypedSession) {
+            this.cookie.expires = new Date(_now + this.cookie.maxAge! * 1000);
+            this[isTouched] = true;
+          },
         },
-      },
-      destroy: {
-        value: async function destroy(this: TypedSession) {
-          this[isDestroyed] = true;
-          this.cookie.expires = new Date(1);
-          await store.destroy(this.id);
-          if (!autoCommit) commitHeader(res, name, this, encode);
-          delete req.session;
+        destroy: {
+          value: async function destroy(this: TypedSession) {
+            this[isDestroyed] = true;
+            this.cookie.expires = new Date(1);
+            await store.destroy(this.id);
+            if (!autoCommit) commitHeader(res, name, this, encode);
+            delete req.session;
+          },
         },
-      },
-      id: { value: id },
-    });
+        id: { value: id },
+      });
+    }
   }
 
   return async function sessionHandle(
-    req: IncomingMessage & { session?: TypedSession },
-    res: ServerResponse
+    req: (IncomingMessage & { session?: TypedSession }) | CookieStore,
+    res?: ServerResponse
   ): Promise<TypedSession> {
-    if (req.session) return req.session;
+    if ("session" in req && req.session) return req.session;
 
     const _now = Date.now();
 
-    let sessionId = req.headers?.cookie
-      ? c.parse(req.headers.cookie)[name]
-      : null;
+    let sessionId =
+      "headers" in req && req.headers?.cookie
+        ? c.parse(req.headers.cookie)[name]
+        : "get" in req
+        ? req.get(name)?.value
+        : null;
+
     if (sessionId && decode) {
       sessionId = decode(sessionId);
     }
@@ -108,47 +116,49 @@ export default function session<T extends SessionRecord = SessionRecord>(options
       decorateSession(req, res, session, sessionId, _now);
     }
 
-    req.session = session;
+    if ("session" in req && res) {
+      req.session = session;
 
-    // prevSessStr is used to compare the session later
-    // in autoCommit -- that is, we only save the
-    // session if it has changed.
-    let prevHash: string | undefined;
-    if (autoCommit) {
-      prevHash = hash(session);
-    }
+      // prevSessStr is used to compare the session later
+      // in autoCommit -- that is, we only save the
+      // session if it has changed.
+      let prevHash: string | undefined;
+      if (autoCommit) {
+        prevHash = hash(session);
+      }
 
-    // autocommit: We commit the header and save the session automatically
-    // by "proxying" res.writeHead and res.end methods. After committing, we
-    // call the original res.writeHead and res.end.
-    if (autoCommit) {
-      const _writeHead = res.writeHead;
-      res.writeHead = function resWriteHeadProxy(...args: any) {
-        // Commit the header if either:
-        // - session is new and has been populated
-        // - session is flagged to commit header (touched or destroyed)
-        if (
-          (session[isNew] && Object.keys(session).length > 1) ||
-          session[isTouched] ||
-          session[isDestroyed]
-        ) {
-          commitHeader(res, name, session, encode);
-        }
-        return _writeHead.apply(this, args);
-      };
-      const _end = res.end;
-      res.end = function resEndProxy(...args: any) {
-        const done = () => _end.apply(this, args);
-        if (session[isDestroyed]) {
-          done();
-        } else if (hash(session) !== prevHash) {
-          store.set(session.id, session).finally(done);
-        } else if (session[isTouched] && store.touch) {
-          store.touch(session.id, session).finally(done);
-        } else {
-          done();
-        }
-      };
+      // autocommit: We commit the header and save the session automatically
+      // by "proxying" res.writeHead and res.end methods. After committing, we
+      // call the original res.writeHead and res.end.
+      if (autoCommit) {
+        const _writeHead = res.writeHead;
+        res.writeHead = function resWriteHeadProxy(...args: any) {
+          // Commit the header if either:
+          // - session is new and has been populated
+          // - session is flagged to commit header (touched or destroyed)
+          if (
+            (session[isNew] && Object.keys(session).length > 1) ||
+            session[isTouched] ||
+            session[isDestroyed]
+          ) {
+            commitHeader(res, name, session, encode);
+          }
+          return _writeHead.apply(this, args);
+        };
+        const _end = res.end;
+        res.end = function resEndProxy(...args: any) {
+          const done = () => _end.apply(this, args);
+          if (session[isDestroyed]) {
+            done();
+          } else if (hash(session) !== prevHash) {
+            store.set(session.id, session).finally(done);
+          } else if (session[isTouched] && store.touch) {
+            store.touch(session.id, session).finally(done);
+          } else {
+            done();
+          }
+        };
+      }
     }
 
     return session;
